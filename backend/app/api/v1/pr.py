@@ -5,6 +5,7 @@ from pydantic import BaseModel, HttpUrl
 from typing import Annotated
 import asyncio
 from app.api.deps import get_current_user
+from app.services.github_client import github_client # 新增引入
 
 router = APIRouter()
 
@@ -23,17 +24,25 @@ class ReviewResponse(BaseModel):
 # --- 模拟后台 AI 工作流 ---
 async def process_pr_review_workflow(pr_url: str):
     """
-    真正的 LangGraph AI 工作流会在这里执行。
-    跑在后台任务中，不阻塞 API 响应。
+    后台处理流程：拉取代码 -> AI 分析 -> 保存结果
     """
-    print(f"[Worker] 开始拉取 PR 数据: {pr_url}")
-    await asyncio.sleep(2)  # 模拟拉取耗时
+    print(f"\n[Worker] 开始处理任务，提取 PR 链接: {pr_url}")
 
-    print("[Worker] RAG 上下文构建完毕，启动 LangGraph 多 Agent 审查...")
-    await asyncio.sleep(3)  # 模拟大模型思考耗时
+    try:
+        # 1. 真实拉取 GitHub Diff 代码
+        print("[Worker] 正在向 GitHub 请求 Diff 数据...")
+        diff_content = await github_client.get_pr_diff(pr_url)
 
-    print("[Worker] AI 评审完成，结果已存入数据库 / 推送回 Github！")
+        print(f"[Worker] ✅ 成功拉取到代码变更！Diff 长度: {len(diff_content)} 字符")
+        print("------- Diff 预览 (前 300 字符) -------")
+        print(diff_content[:300])
+        print("---------------------------------------")
 
+        # 2. (下一步目标) 将 diff_content 喂给 LangGraph AI 智能体
+        print("[Worker] 准备启动 LangGraph 多 Agent 审查... (待实现)")
+
+    except Exception as e:
+        print(f"[Worker] ❌ 任务执行失败: {str(e)}")
 
 # --- 路由接口 ---
 @router.post("/submit", response_model=ReviewResponse)
