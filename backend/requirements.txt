@@ -4,6 +4,7 @@ uvicorn[standard]>=0.30.1   # ASGI 服务器
 pydantic>=2.7.4             # 数据验证与序列化
 pydantic-settings>=2.3.4    # 严谨的环境变量与应用配置管理
 python-dotenv>=1.0.1        # 本地 .env 文件加载
+python-multipart
 
 # 2. AI 与大模型工作流编排
 langchain>=0.2.6            # LLM 应用开发框架
