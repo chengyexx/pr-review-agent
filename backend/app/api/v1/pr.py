@@ -1,19 +1,25 @@
 # PR 提交、触发 Review 的接口
 # backend/app/api/v1/pr.py
 from fastapi import APIRouter, Depends, BackgroundTasks
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl,Field
 from typing import Annotated
 import asyncio
 from app.api.deps import get_current_user
 from app.services.github_client import github_client # 新增引入
+from app.agents.graph import compile_review_graph
 
 router = APIRouter()
 
 
 # --- Pydantic 验证模型 ---
 class PRSubmitRequest(BaseModel):
-    github_pr_url: HttpUrl  # 使用强类型校验，防止前端乱传无效 URL
-
+    # 使用 Field 注入真实可用的默认测试链接
+    github_pr_url: HttpUrl = Field(
+        ...,
+        title="GitHub PR 链接",
+        description="请填入需要审查的 GitHub PR 完整网址",
+        examples=["https://github.com/vuejs/core/pull/9652"] # <--- 换成了 Vue 官方的真实 PR
+    )
 
 class ReviewResponse(BaseModel):
     task_id: str
@@ -24,26 +30,56 @@ class ReviewResponse(BaseModel):
 # --- 模拟后台 AI 工作流 ---
 async def process_pr_review_workflow(pr_url: str):
     """
-    后台处理流程：拉取代码 -> AI 分析 -> 保存结果
+    后台处理流程：拉取代码 -> 启动 LangGraph AI 分析 -> 保存结果
     """
-    print(f"\n[Worker] 开始处理任务，提取 PR 链接: {pr_url}")
+    print(f"\n[Worker] 🟢 开始处理评审任务: {pr_url}")
 
     try:
         # 1. 真实拉取 GitHub Diff 代码
         print("[Worker] 正在向 GitHub 请求 Diff 数据...")
         diff_content = await github_client.get_pr_diff(pr_url)
+        print(f"[Worker] ✅ 成功拉取代码，Diff 长度: {len(diff_content)} 字符")
 
-        print(f"[Worker] ✅ 成功拉取到代码变更！Diff 长度: {len(diff_content)} 字符")
-        print("------- Diff 预览 (前 300 字符) -------")
-        print(diff_content[:300])
-        print("---------------------------------------")
+        # 2. 初始化并启动 LangGraph 智能体网络
+        print("[Worker] 🧠 启动 LangGraph 多 Agent 审查网络...")
+        graph_app = compile_review_graph()
 
-        # 2. (下一步目标) 将 diff_content 喂给 LangGraph AI 智能体
-        print("[Worker] 准备启动 LangGraph 多 Agent 审查... (待实现)")
+        # 构造初始状态 (注意：这里必须与最新的 PRReviewState 保持一致)
+        initial_state = {
+            "pr_url": pr_url,
+            "diff_content": diff_content,
+            "is_trivial": False,
+            "skip_reason": "",
+            "findings": [],  # <--- 使用了新的 findings 字段
+            "radar_scores": {},
+            "summary": "",
+            "final_score": 0
+        }
+
+        # invoke 会按照我们在 graph.py 中定义的边，一步步执行节点
+        final_state = graph_app.invoke(initial_state)
+
+        # 3. 打印最终结果 (适配最新的状态数据结构)
+        print("\n================ 评审结果报告 ================")
+        print(f"🔹 最终得分: {final_state.get('final_score')} 分")  # 改为 final_score
+        print(f"🔹 雷达图维度: {final_state.get('radar_scores')}")  # 新增雷达图打印
+        print(f"🔹 整体总结: {final_state.get('summary')}")
+        print(f"🔹 具体建议详情:")
+
+        findings = final_state.get('findings', [])
+        if not findings:
+            print("   ✅ 未发现明显需要改进的地方。")
+        else:
+            for idx, finding in enumerate(findings):
+                # finding 是我们在 evaluate.py 中强制大模型返回的 Pydantic 模型对象
+                print(
+                    f"   {idx + 1}. [{finding.severity.upper()}] 📍 文件: {finding.file_path} (行号/函数: {finding.line_number})")
+                print(f"      描述: {finding.description}")
+                print(f"      建议: {finding.suggestion}\n")
+        print("============================================\n")
 
     except Exception as e:
         print(f"[Worker] ❌ 任务执行失败: {str(e)}")
-
 # --- 路由接口 ---
 @router.post("/submit", response_model=ReviewResponse)
 async def submit_pr_review(
