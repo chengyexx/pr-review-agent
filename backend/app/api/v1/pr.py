@@ -50,10 +50,38 @@ async def process_pr_review_workflow(task_id: str, pr_url: str):
             "final_score": 0
         }
 
-        # 真正调用 LangGraph 跑大模型
+# 真正调用 LangGraph 跑大模型
         final_state = await graph_app.ainvoke(initial_state)
 
-        # 🌟【核心新增】：将大模型生成的真实结果，转换为前端需要的格式并保存
+        # --- 1. 保留主分支的控制台打印 (方便后端调试) ---
+        print("\n================ 🏆 智能评审报告 🏆 ================")
+        print(f"🔹 综合得分: {final_state.get('final_score')} 分")
+        print(f"🔹 雷达维度: {final_state.get('radar_scores')}")
+        print("-" * 50)
+
+        # 打印大模型提取的全局评价
+        eval_data = final_state.get('evaluation')
+        if eval_data:
+            print(f"🎯 核心用途:\n   {eval_data.purpose}")
+            print(f"🌟 代码亮点:")
+            for pro in eval_data.pros:
+                print(f"   [+] {pro}")
+            print(f"📉 宏观不足:")
+            for con in eval_data.cons:
+                print(f"   [-] {con}")
+        print("-" * 50)
+
+        print(f"🐛 细节建议详情 ({len(final_state.get('findings', []))}条):")
+        findings = final_state.get('findings', [])
+        if not findings:
+            print("   ✅ 未发现明显需要改进的地方，代码很棒！")
+        else:
+            for idx, finding in enumerate(findings):
+                print(f"   {idx + 1}. [{finding.severity.upper()}] 📍 文件: {finding.file_path}")
+                print(f"      描述: {finding.description}")
+        print("====================================================\n")
+
+        # --- 2. 保留前端分支的核心逻辑：将结果存入内存供前端提取 ---
         REVIEW_TASKS[task_id] = {
             "status": "completed",
             "result": {

@@ -1,4 +1,3 @@
-# backend/app/agents/nodes/evaluate.py
 import asyncio
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -16,22 +15,22 @@ class FindingsList(BaseModel):
 
 async def evaluate_single_file(llm, file_name: str, file_diff: str) -> List[ReviewFinding]:
     """独立审查单个文件的协程函数"""
-    print(f"   ⏳ [Agent->Evaluate] 正在并行审查文件: {file_name} ...")
+    print(f"    ⏳ [Agent->Evaluate] 正在并行审查文件: {file_name} ...")
 
-    # 🌟 核心：使用高兼容性的 Parser，而不是 structured_output
+    # 🌟 核心：使用高兼容性的 Parser，并包含“绝对强制规范”，确保前端渲染格式稳定
     parser = PydanticOutputParser(pydantic_object=FindingsList)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", """你是一个资深、严谨的高级架构师。
-            请审查以下 Git Diff 文件片段。即使代码没有致命错误，也请尽量找出 1-2 个可以优化的地方。
-            重点关注：
-            1. 安全漏洞与边界条件（空指针、未处理异常等）。
-            2. 性能瓶颈与代码可读性优化。
+        请审查以下 Git Diff 文件片段。即使代码没有致命错误，也请尽量找出 1-2 个可以优化的地方。
+        重点关注：
+        1. 安全漏洞与边界条件（空指针、未处理异常等）。
+        2. 性能瓶颈与代码可读性优化。
 
-            ⚠️【绝对强制规范】：
-            在你的 suggestion (修复建议) 字段中，如果包含了具体的代码修改示例，**必须且只能使用完整的 Markdown 代码块 (例如 ```typescript ...代码... ```) 来包裹！** 绝不允许将代码作为纯文本直接输出！
+        ⚠️【绝对强制规范】：
+        在你的 suggestion (修复建议) 字段中，如果包含了具体的代码修改示例，**必须且只能使用完整的 Markdown 代码块 (例如 ```typescript ...代码... ```) 来包裹！** 绝不允许将代码作为纯文本直接输出！
 
-            \n{format_instructions}"""),
+        \n{format_instructions}"""),
         ("user", "文件 [{file_name}] 的变更如下：\n{diff}")
     ]).partial(format_instructions=parser.get_format_instructions())
 
@@ -42,22 +41,24 @@ async def evaluate_single_file(llm, file_name: str, file_diff: str) -> List[Revi
         result: FindingsList = await chain.ainvoke({"file_name": file_name, "diff": file_diff[:8000]})
         return result.items
     except Exception as e:
-        print(f"   ❌ [Agent->Evaluate] 文件 {file_name} 解析失败: {e}")
+        print(f"    ❌ [Agent->Evaluate] 文件 {file_name} 解析失败: {e}")
         return []
 
 
 async def evaluate_node(state: PRReviewState) -> dict:
     """深度评估节点：采用 Map-Reduce 并发架构，按文件拆分进行独立审查。"""
-    print("🧠 [Agent->Evaluate] 启动并发代码审查，解析 Diff 文件树...")
+    print("[Agent->Evaluate] 启动并发代码审查，解析 Diff 文件树...")
 
+    # 统一使用 API_KEY
     if not settings.API_KEY:
-        print("⚠️ 未检测到 API_KEY，返回模拟的审查问题。")
+        print("未检测到 API_KEY，返回模拟的审查问题。")
         mock_finding = ReviewFinding(
             file_path="src/main.ts", line_number="42", severity="warning",
             description="模拟问题：未处理的 Promise 异常", suggestion="建议添加 catch 块。"
         )
         return {"findings": [mock_finding]}
 
+    # 初始化大模型
     llm = ChatOpenAI(
         api_key=settings.API_KEY,
         base_url=settings.BASE_URL,
@@ -77,6 +78,7 @@ async def evaluate_node(state: PRReviewState) -> dict:
 
     tasks = []
     for patched_file in patch_set:
+        # 跳过不需要审查的文件
         if patched_file.is_removed_file or patched_file.path.endswith('.md'):
             continue
 
@@ -89,6 +91,8 @@ async def evaluate_node(state: PRReviewState) -> dict:
         return {"findings": []}
 
     print(f"🚀 [Agent->Evaluate] 共拆分出 {len(tasks)} 个有效文件，开启并行请求...")
+    
+    # 并发执行所有审查任务
     results = await asyncio.gather(*tasks)
 
     all_findings = []
