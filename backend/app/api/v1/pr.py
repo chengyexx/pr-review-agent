@@ -56,27 +56,36 @@ async def process_pr_review_workflow(pr_url: str):
             "final_score": 0
         }
 
-        # invoke 会按照我们在 graph.py 中定义的边，一步步执行节点
-        final_state = graph_app.invoke(initial_state)
+        final_state = await graph_app.ainvoke(initial_state)
 
         # 3. 打印最终结果 (适配最新的状态数据结构)
-        print("\n================ 评审结果报告 ================")
-        print(f"🔹 最终得分: {final_state.get('final_score')} 分")  # 改为 final_score
-        print(f"🔹 雷达图维度: {final_state.get('radar_scores')}")  # 新增雷达图打印
-        print(f"🔹 整体总结: {final_state.get('summary')}")
-        print(f"🔹 具体建议详情:")
+        print("\n================ 🏆 智能评审报告 🏆 ================")
+        print(f"🔹 综合得分: {final_state.get('final_score')} 分")
+        print(f"🔹 雷达维度: {final_state.get('radar_scores')}")
+        print("-" * 50)
 
+        # 打印大模型提取的全局评价
+        eval_data = final_state.get('evaluation')
+        if eval_data:
+            print(f"🎯 核心用途:\n   {eval_data.purpose}")
+            print(f"🌟 代码亮点:")
+            for pro in eval_data.pros:
+                print(f"   [+] {pro}")
+            print(f"📉 宏观不足:")
+            for con in eval_data.cons:
+                print(f"   [-] {con}")
+        print("-" * 50)
+
+        print(f"🐛 细节建议详情 ({len(final_state.get('findings', []))}条):")
         findings = final_state.get('findings', [])
         if not findings:
-            print("   ✅ 未发现明显需要改进的地方。")
+            print("   ✅ 未发现明显需要改进的地方，代码很棒！")
         else:
             for idx, finding in enumerate(findings):
-                # finding 是我们在 evaluate.py 中强制大模型返回的 Pydantic 模型对象
-                print(
-                    f"   {idx + 1}. [{finding.severity.upper()}] 📍 文件: {finding.file_path} (行号/函数: {finding.line_number})")
+                print(f"   {idx + 1}. [{finding.severity.upper()}] 📍 文件: {finding.file_path}")
                 print(f"      描述: {finding.description}")
                 print(f"      建议: {finding.suggestion}\n")
-        print("============================================\n")
+        print("====================================================\n")
 
     except Exception as e:
         print(f"[Worker] ❌ 任务执行失败: {str(e)}")
