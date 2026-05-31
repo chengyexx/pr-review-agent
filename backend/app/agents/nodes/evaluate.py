@@ -17,7 +17,7 @@ async def evaluate_single_file(llm, file_name: str, file_diff: str) -> List[Revi
     """独立审查单个文件的协程函数"""
     print(f"    ⏳ [Agent->Evaluate] 正在并行审查文件: {file_name} ...")
 
-    # 🌟 核心：使用高兼容性的 Parser，并包含“绝对强制规范”，确保前端渲染格式稳定
+    # 🌟 核心：使用高兼容性的 Parser，并包含“绝对强制规范”，确保前端渲染格式稳定.
     parser = PydanticOutputParser(pydantic_object=FindingsList)
 
     prompt = ChatPromptTemplate.from_messages([
