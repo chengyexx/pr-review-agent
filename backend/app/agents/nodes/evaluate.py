@@ -65,7 +65,6 @@ List[ReviewFinding]:
         workflow.add_edge("tools", "agent")
 
         agent_app = workflow.compile()
-
         # 3. 运行状态机
         system_prompt = f"""你是一个拥有自主搜索能力的极客架构师。当前审查的仓库是：{repo_name}。
         请审查以下 Git Diff 文件片段。即使代码没有致命错误，也请尽量找出 1-2 个可以优化的地方，重点关注安全漏洞、边界条件和性能瓶颈。
