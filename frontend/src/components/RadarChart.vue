@@ -37,10 +37,10 @@ watch(() => props.scores, (s) => {
       radius: '58%',
       center: ['50%', '52%'],
       indicator: [
-        { name: 'Security', max: 100 },
-        { name: 'Performance', max: 100 },
-        { name: 'Style', max: 100 },
-        { name: 'Robustness', max: 100 },
+        { name: '安全性', max: 100 },
+        { name: '性能', max: 100 },
+        { name: '规范', max: 100 },
+        { name: '健壮性', max: 100 },
       ],
       shape: 'polygon',
       splitNumber: 4,
@@ -66,7 +66,7 @@ watch(() => props.scores, (s) => {
       type: 'radar',
       data: [{
         value: [s.security, s.performance, s.style, s.robustness],
-        name: 'Quality Score',
+        name: '代码质量',
         symbol: 'circle',
         symbolSize: 6,
         lineStyle: {
