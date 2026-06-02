@@ -7,7 +7,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from typing import List
 from unidiff import PatchSet
-from langgraph.graph import StateGraph, START, END, MessagesState
+from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
 from app.agents.state import PRReviewState, ReviewFinding
 from app.core.config import settings
@@ -30,8 +30,13 @@ async def read_github_file(repo_name: str, file_path: str) -> str:
     return await github_client.get_file_content(repo_name, file_path, branch="main")
 
 
-async def evaluate_single_file(llm, file_name: str, file_diff: str, repo_name: str, read_source_code: bool = True) -> \
-List[ReviewFinding]:
+async def evaluate_single_file(
+    llm: ChatOpenAI,
+    file_name: str,
+    file_diff: str,
+    repo_name: str,
+    read_source_code: bool = True,
+) -> List[ReviewFinding]:
     """使用纯 LangGraph 状态机构建的智能体循环"""
 
     # ==========================================

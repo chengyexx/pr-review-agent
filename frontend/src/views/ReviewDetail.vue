@@ -297,9 +297,20 @@ const formatInlineCode = (text: string) => {
 
 const formatRobustSuggestion = (text: string) => {
   if (!text) return ''
-  let clean = text.replace(/```[a-z]*\n?/g, '').replace(/```/g, '')
-  clean = clean.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-  return clean
+  // 保留代码块内容但移除 markdown 围栏标记，同时保护行内代码
+  // 先用占位符保护行内代码，处理完代码块后再还原
+  const inlineCodes: string[] = []
+  let protected_text = text.replace(/`([^`]+)`/g, (_, code) => {
+    inlineCodes.push(code)
+    return `\x00INLINE${inlineCodes.length - 1}\x00`
+  })
+  // 移除代码块围栏标记（```language 开头和 ``` 结尾）
+  protected_text = protected_text.replace(/```[a-zA-Z]*\n?/g, '').replace(/```/g, '')
+  // 还原行内代码
+  protected_text = protected_text.replace(/\x00INLINE(\d+)\x00/g, (_, i) => {
+    return `<code class="inline-code">${inlineCodes[parseInt(i)]}</code>`
+  })
+  return protected_text
 }
 
 const toggleChat = (index: number) => {
