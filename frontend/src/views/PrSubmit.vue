@@ -143,7 +143,7 @@ const steps = [
 
 const demos = [
   { name: 'Vue.js Core', url: 'https://github.com/vuejs/core/pull/9652', color: '#42b883' },
-  { name: 'FastAPI', url: 'https://github.com/fastapi/fastapi/pull/11693', color: '#009688' },
+  { name: 'FastAPI', url: 'https://github.com/fastapi/fastapi/pull/15661', color: '#009688' },
 ]
 
 const features = [

@@ -1,21 +1,43 @@
 # backend/app/agents/nodes/scout.py
+from unidiff import PatchSet
 from app.agents.state import PRReviewState
 from app.core.log_util import safe_print
+
+# Files with these extensions are considered "doc-only" (skip deep code review)
+DOC_ONLY_EXTENSIONS = {".md", ".txt", ".rst", ".adoc"}
 
 
 def scout_node(state: PRReviewState) -> dict:
     """
-    侦察节点：分析 Diff 复杂度，判断是否属于“无脑合并”的修改。
-    这是评委非常看重的降本增效（Token 控制）策略。
+    Scout node: analyze diff complexity, decide whether this PR is trivial.
+    Uses per-file PatchSet analysis instead of whole-diff string matching
+    to avoid false "trivial" classification for mixed-content PRs.
     """
-    safe_print("[Agent->Scout] 正在分析 PR 变更内容与复杂度...")
+    safe_print("[Agent->Scout] Analyzing PR changes and complexity...")
     diff = state.get("diff_content", "")
 
     if len(diff.strip()) == 0:
-        return {"is_trivial": True, "skip_reason": "空提交或无有效代码变更。"}
+        return {"is_trivial": True, "skip_reason": "Empty commit or no effective code changes."}
 
-    if "diff --git" in diff and ".md" in diff and ".py" not in diff and ".ts" not in diff:
-        return {"is_trivial": True, "skip_reason": "纯文档修改，无需深度安全审查。"}
+    # Parse diff per-file: only skip if ALL changed files are doc-only
+    try:
+        patch_set = PatchSet(diff)
+        code_files_found = False
+        for patched_file in patch_set:
+            if patched_file.is_removed_file:
+                continue
+            ext = ""
+            if "." in patched_file.path:
+                _, ext = patched_file.path.rsplit(".", 1)
+                ext = "." + ext
+            if ext not in DOC_ONLY_EXTENSIONS:
+                code_files_found = True
+                break
 
-    safe_print("[Agent->Scout] 发现核心代码变更，放行至深度审查环节。")
+        if not code_files_found:
+            return {"is_trivial": True, "skip_reason": "Doc-only changes, no deep review needed."}
+    except Exception as e:
+        safe_print(f"[Agent->Scout] WARNING: diff parse failed, allowing deep review: {e}")
+
+    safe_print("[Agent->Scout] Core code changes detected, routing to evaluate node.")
     return {"is_trivial": False, "skip_reason": ""}
