@@ -1,7 +1,6 @@
 <template>
   <div class="app-root">
-    <div class="ambient ambient-1" />
-    <div class="ambient ambient-2" />
+    <div class="grid-bg" />
     <router-view />
   </div>
 </template>
@@ -13,29 +12,13 @@
   overflow-x: hidden;
 }
 
-.ambient {
+.grid-bg {
   position: fixed;
-  border-radius: 50%;
-  filter: blur(120px);
-  pointer-events: none;
+  inset: 0;
   z-index: 0;
-}
-
-.ambient-1 {
-  width: 600px;
-  height: 600px;
-  background: rgba(99, 102, 241, 0.12);
-  top: -200px;
-  right: -100px;
-  animation: pulse-glow 8s ease-in-out infinite;
-}
-
-.ambient-2 {
-  width: 500px;
-  height: 500px;
-  background: rgba(34, 211, 238, 0.08);
-  bottom: -150px;
-  left: -100px;
-  animation: pulse-glow 10s ease-in-out infinite reverse;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.4;
 }
 </style>
