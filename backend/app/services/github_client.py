@@ -1,4 +1,3 @@
-# 封装 GitHub API (拉取 Diff, 回写评论)
 # backend/app/services/github_client.py
 import httpx
 import re
@@ -56,6 +55,32 @@ class GithubClient:
                 raise HTTPException(status_code=response.status_code, detail=f"GitHub API 请求失败: {response.text}")
 
             return response.text
+
+    async def get_file_content(self, repo_name: str, file_path: str, branch: str = "main") -> str:
+        """
+        异步获取指定仓库中特定文件的源码 (供 AI Agent 主动检索上下文使用)
+        :param repo_name: 格式如 "vuejs/core"
+        :param file_path: 文件的相对路径, 如 "src/utils/index.ts"
+        :param branch: 分支名, 默认 "main"
+        """
+        api_url = f"https://api.github.com/repos/{repo_name}/contents/{file_path}?ref={branch}"
+
+        # 请求 raw 格式的关键 Header，直接获取纯代码文本
+        headers = self.base_headers.copy()
+        headers["Accept"] = "application/vnd.github.v3.raw"
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(api_url, headers=headers, timeout=10.0)
+
+                if response.status_code == 200:
+                    return response.text
+                elif response.status_code == 404:
+                    return f"Error: 文件 {file_path} 不存在于分支 {branch} 中。请检查路径。"
+                else:
+                    return f"Error: 无法获取文件内容，状态码 {response.status_code}"
+            except Exception as e:
+                return f"Error: 请求源码时发生网络异常: {str(e)}"
 
 
 # 实例化一个单例供外部调用
