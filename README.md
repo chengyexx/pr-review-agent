@@ -90,6 +90,11 @@ npm run dev
 
 ## 项目演示
 
-**演示视频**：[点击这里观看 AI PR Review Assistant 完整功能介绍](【七牛云 x XENGINEER 暑期实训营-题目三：AI PR Review 助手】 https://www.bilibili.com/video/BV1w8VQ6QEeM/?share_source=copy_web&vd_source=dbbde7a85366f1693f082df34280afcd)
+**演示视频**：
+# 最新视频↓
+[点击这里观看 AI PR Review Assistant 完整功能介绍](【七牛云 x XENGINEER 暑期实训营-题目三】 https://www.bilibili.com/video/BV1QSV66MEUr/?share_source=copy_web&vd_source=dbbde7a85366f1693f082df34280afcd)
+
+
+旧视频：[点击这里观看 AI PR Review Assistant 完整功能介绍]( https://www.bilibili.com/video/BV1w8VQ6QEeM/?share_source=copy_web&vd_source=dbbde7a85366f1693f082df34280afcd)
 
 > *Built with Vue 3, FastAPI & LangGraph. AI Empowers Engineering.*
