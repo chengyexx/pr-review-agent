@@ -7,11 +7,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from typing import List
 from unidiff import PatchSet
-
-# 🌟 引入 LangGraph 核心组件
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
-
 from app.agents.state import PRReviewState, ReviewFinding
 from app.core.config import settings
 from app.services.github_client import github_client
@@ -32,65 +29,65 @@ async def read_github_file(repo_name: str, file_path: str) -> str:
     return await github_client.get_file_content(repo_name, file_path, branch="main")
 
 
-async def evaluate_single_file(llm, file_name: str, file_diff: str, repo_name: str) -> List[ReviewFinding]:
+async def evaluate_single_file(llm, file_name: str, file_diff: str, repo_name: str, read_source_code: bool = True) -> \
+List[ReviewFinding]:
     """使用纯 LangGraph 状态机构建的智能体循环"""
-    print(f"    ⏳ [LangGraph->Evaluate] 启动状态机探索模式: {file_name} ...")
 
     # ==========================================
-    # 阶段一：基于 LangGraph 的主动搜索 (State Machine)
+    # 阶段一：基于开关的推理模式选择
     # ==========================================
-    tools = [read_github_file]
-    llm_with_tools = llm.bind_tools(tools)
+    if not read_source_code:
+        # ⚡ 极速降级模式：不查源码，直接跳过 LangGraph 循环
+        print(f"    ⚡ [LangGraph->Evaluate] 极速审查模式 (关闭查阅源码): {file_name} ...")
+        analysis_text = f"请直接对以下代码变更（Diff）进行严格审查，找出潜在的安全漏洞、边界条件和性能瓶颈：\n{file_diff[:8000]}"
 
-    # 1. 定义思考节点
-    async def call_model(state: MessagesState):
-        messages = state["messages"]
-        response = await llm_with_tools.ainvoke(messages)
-        return {"messages": [response]}
+    else:
+        # ⏳ 深度智能体模式：启动基于 LangGraph 的主动搜索
+        print(f"    ⏳ [LangGraph->Evaluate] 启动状态机探索模式 (允许查阅源码): {file_name} ...")
 
-    # 2. 构建 LangGraph 状态图
-    workflow = StateGraph(MessagesState)
+        tools = [read_github_file]
+        llm_with_tools = llm.bind_tools(tools)
 
-    # 添加节点
-    workflow.add_node("agent", call_model)
-    workflow.add_node("tools", ToolNode(tools))  # 原生工具节点
+        # 1. 定义思考节点
+        async def call_model(state: MessagesState):
+            messages = state["messages"]
+            response = await llm_with_tools.ainvoke(messages)
+            return {"messages": [response]}
 
-    # 添加边与路由逻辑
-    workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges(
-        "agent",
-        tools_condition,  # 如果模型返回了 tool_calls，去 "tools"；否则去 END
-    )
-    workflow.add_edge("tools", "agent")
+        # 2. 构建 LangGraph 状态图
+        workflow = StateGraph(MessagesState)
 
-    # 编译图
-    agent_app = workflow.compile()
+        # 添加节点与边
+        workflow.add_node("agent", call_model)
+        workflow.add_node("tools", ToolNode(tools))
+        workflow.add_edge(START, "agent")
+        workflow.add_conditional_edges("agent", tools_condition)
+        workflow.add_edge("tools", "agent")
 
-    # 3. 组装初始 Prompt 并运行状态机
-    system_prompt = f"""你是一个拥有自主搜索能力的极客架构师。当前审查的仓库是：{repo_name}。
-请审查以下 Git Diff 文件片段。即使代码没有致命错误，也请尽量找出 1-2 个可以优化的地方，重点关注安全漏洞、边界条件和性能瓶颈。
+        agent_app = workflow.compile()
+        # 3. 运行状态机
+        system_prompt = f"""你是一个拥有自主搜索能力的极客架构师。当前审查的仓库是：{repo_name}。
+        请审查以下 Git Diff 文件片段。即使代码没有致命错误，也请尽量找出 1-2 个可以优化的地方，重点关注安全漏洞、边界条件和性能瓶颈。
 
-【重要授权】：如果 Diff 中的代码引用了外部的类、函数或变量（例如 import 语句），
-你有权力且必须调用 `read_github_file` 工具去查阅那个文件的源码！绝不允许在缺乏上下文时盲猜！
-查阅完毕后，综合 Diff 和你查到的上下文，写一份详细的审查分析草稿。"""
+        【重要授权】：如果 Diff 中的代码引用了外部的类、函数或变量（例如 import 语句），
+        你有权力且必须调用 `read_github_file` 工具去查阅那个文件的源码！绝不允许在缺乏上下文时盲猜！
+        查阅完毕后，综合 Diff 和你查到的上下文，写一份详细的审查分析草稿。"""
 
-    initial_state = {
-        "messages": [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=f"文件 [{file_name}] 的变更如下：\n{file_diff[:8000]}")
-        ]
-    }
+        initial_state = {
+            "messages": [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=f"文件 [{file_name}] 的变更如下：\n{file_diff[:8000]}")
+            ]
+        }
 
-    try:
-        # 执行 LangGraph
-        result_state = await agent_app.ainvoke(initial_state)
-        # 获取状态机流转到最后一条消息的内容（即 AI 的最终结论）
-        analysis_text = result_state["messages"][-1].content
-    except Exception as e:
-        print(f"    ⚠️ [LangGraph->Evaluate] 探索阶段失败，降级为基础审查: {e}")
-        analysis_text = f"基于以下代码变更进行审查发现：\n{file_diff[:8000]}"
+        try:
+            result_state = await agent_app.ainvoke(initial_state)
+            analysis_text = result_state["messages"][-1].content
+        except Exception as e:
+            print(f"    ⚠️ [LangGraph->Evaluate] 探索阶段失败，降级为基础审查: {e}")
+            analysis_text = f"基于以下代码变更进行审查发现：\n{file_diff[:8000]}"
 
-    print(f"    💡 [LangGraph->Evaluate] {file_name} 探索完成，开始格式化提取...")
+    print(f"    💡 [LangGraph->Evaluate] {file_name} 推理完成，开始格式化提取...")
 
     # ==========================================
     # 阶段二：格式化输出 (Structured Extraction)
@@ -126,7 +123,6 @@ async def evaluate_node(state: PRReviewState) -> dict:
     if not settings.API_KEY:
         return {"findings": []}
 
-    # 务必确保该模型支持 Tool Calling，如 GPT-4o, Claude 3.5 Sonnet 等
     llm = ChatOpenAI(
         api_key=settings.API_KEY,
         base_url=settings.BASE_URL,
@@ -136,6 +132,9 @@ async def evaluate_node(state: PRReviewState) -> dict:
 
     diff_content = state.get("diff_content", "")
     pr_url = state.get("pr_url", "")
+
+    # 🌟 从状态中读取开关参数（默认开启）
+    read_source_code = state.get("read_source_code", True)
 
     repo_name = "unknown/repo"
     if pr_url:
@@ -149,7 +148,8 @@ async def evaluate_node(state: PRReviewState) -> dict:
         patch_set = PatchSet(diff_content)
     except Exception as e:
         print(f"⚠️ 解析 Diff 失败，降级为全文审查: {e}")
-        findings = await evaluate_single_file(llm, "Unknown", diff_content, repo_name)
+        # 🌟 透传开关参数
+        findings = await evaluate_single_file(llm, "Unknown", diff_content, repo_name, read_source_code)
         return {"findings": findings}
 
     tasks = []
@@ -159,7 +159,8 @@ async def evaluate_node(state: PRReviewState) -> dict:
 
         file_diff_text = str(patched_file)
         if len(file_diff_text.strip()) > 0:
-            tasks.append(evaluate_single_file(llm, patched_file.path, file_diff_text, repo_name))
+            # 🌟 透传开关参数
+            tasks.append(evaluate_single_file(llm, patched_file.path, file_diff_text, repo_name, read_source_code))
 
     if not tasks:
         return {"findings": []}

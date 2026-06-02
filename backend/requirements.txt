@@ -1,29 +1,17 @@
-# 1. 核心 Web 框架与配置
-fastapi>=0.111.0            # 高性能异步 Web 框架
-uvicorn[standard]>=0.30.1   # ASGI 服务器
-pydantic>=2.7.4             # 数据验证与序列化
-pydantic-settings>=2.3.4    # 严谨的环境变量与应用配置管理
-python-dotenv>=1.0.1        # 本地 .env 文件加载
-python-multipart
+# 核心框架
+fastapi
+uvicorn[standard]
+langchain
+langchain-openai
+langchain-community
+langgraph
+pydantic
+cryptography
+pyjwt
 
-# 2. AI 与大模型工作流编排
-langchain>=0.2.6            # LLM 应用开发框架
-langchain-core>=0.2.10      # LangChain 核心抽象
-langchain-openai>=0.1.9     # 假设使用 OpenAI 兼容的 API (可根据实际模型替换)
-langgraph>=0.0.69           # 构建基于状态机的多 Agent 协同工作流
-tiktoken>=0.7.0             # 精确计算 Token，防止 Diff 过大撑爆上下文窗口
+# 基础工具
+unidiff
+tiktoken
 
-# 3. RAG 与上下文检索
-chromadb>=0.5.3             # 轻量级本地向量数据库，无需额外部署服务
-langchain-chroma>=0.1.1     # LangChain 与 Chroma 的官方集成包
-
-# 4. GitHub 交互与 Git 数据解析
-PyGithub>=2.3.0             # 官方推荐的 GitHub API 客户端，拉取 PR 与回写评论
-httpx>=0.27.0               # 现代化的异步 HTTP 请求库 (用于 Webhook 或自定义 API)
-unidiff>=0.7.5              # 专业解析 Git 统一差异格式 (Unified Diff) 的神器
-
-# 开发与测试环境 (建议放入 requirements-dev.txt 或注释说明)
-pytest>=8.2.2               # 单元测试框架
-pytest-asyncio>=0.23.7      # 支持测试 FastAPI 的异步接口
-black>=24.4.2               # 极其严格的代码自动格式化工具
-flake8>=7.1.0               # 代码静态质量检查
+python-dotenv
+httpx
