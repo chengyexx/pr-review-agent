@@ -10,6 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.agents.graph import compile_review_graph
 from app.services.github_client import github_client
 from app.core.config import settings
+from app.core.log_util import safe_print
 
 router = APIRouter()
 
@@ -26,7 +27,7 @@ class PRReviewRequest(BaseModel):
 @router.post("/review")
 async def review_pr_manually(request: PRReviewRequest):
     """手动触发模式：并发执行 LangGraph 并返回完整结构化数据与消耗看板"""
-    print(f"\n[手动触发] 🔍 收到前端请求: {request.pr_url} (查阅源码: {request.read_source_code})")
+    safe_print(f"\n[手动触发] 🔍 收到前端请求: {request.pr_url} (查阅源码: {request.read_source_code})")
 
     # 1. 设置 Token
     if hasattr(settings, "GITHUB_TOKEN") and settings.GITHUB_TOKEN:
@@ -37,6 +38,8 @@ async def review_pr_manually(request: PRReviewRequest):
         diff_content = await github_client.get_pr_diff(request.pr_url)
         if not diff_content:
             raise HTTPException(status_code=400, detail="无法获取该 PR 的 Diff 内容")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"拉取 GitHub Diff 失败: {str(e)}")
 
@@ -48,7 +51,7 @@ async def review_pr_manually(request: PRReviewRequest):
             if patched_file.is_added_file:
                 added_files.append(patched_file.path)
     except Exception as e:
-        print(f"⚠️ 解析新增文件列表失败: {e}")
+        safe_print(f"⚠️ 解析新增文件列表失败: {e}")
 
     initial_state = {
         "pr_url": request.pr_url,
@@ -57,7 +60,7 @@ async def review_pr_manually(request: PRReviewRequest):
     }
 
     # 4. 启动图并追踪性能与成本
-    print("[手动触发] 🤖 正在并发运行 LangGraph 状态机网络...")
+    safe_print("[手动触发] 🤖 正在并发运行 LangGraph 状态机网络...")
     start_time = time.time()  # 🌟 开始计时
 
     try:
@@ -76,13 +79,31 @@ async def review_pr_manually(request: PRReviewRequest):
             # 以近似 gpt-4o-mini 的计费标准作为参考: 输入 $0.15/1M, 输出 $0.60/1M
             cost = (cb.prompt_tokens / 1000000) * 0.15 + (cb.completion_tokens / 1000000) * 0.60
 
-        print(f"[看板数据] ⏱️ 耗时: {elapsed_seconds}s | 🪙 Tokens: {cb.total_tokens} | 💰 估算: ${cost:.4f}")
+        safe_print(f"[看板数据] ⏱️ 耗时: {elapsed_seconds}s | 🪙 Tokens: {cb.total_tokens} | 💰 估算: ${cost:.4f}")
+
+        evaluation = result_state.get("evaluation")
+        if hasattr(evaluation, "model_dump"):
+            evaluation = evaluation.model_dump()
+        elif hasattr(evaluation, "dict"):
+            evaluation = evaluation.dict()
+
+        findings = result_state.get("findings", [])
+        serialized_findings = [
+            f.model_dump() if hasattr(f, "model_dump") else (f.dict() if hasattr(f, "dict") else f)
+            for f in findings
+        ]
 
         return {
             "status": "success",
             "is_trivial": result_state.get("is_trivial", False),
+            "skip_reason": result_state.get("skip_reason", ""),
             "summary": result_state.get("summary", "AI 审查完成，未生成全局总结。"),
-            "findings": result_state.get("findings", []),
+            "findings": serialized_findings,
+            "final_score": result_state.get("final_score", 100),
+            "radar_scores": result_state.get("radar_scores", {
+                "security": 100, "performance": 100, "style": 100, "robustness": 100
+            }),
+            "evaluation": evaluation,
             "added_files": added_files,
             "usage_stats": {
                 "elapsed_seconds": elapsed_seconds,
@@ -113,7 +134,7 @@ async def chat_about_finding(request: PRChatRequest):
     """
     缺陷双向互动接口：前端将具体的缺陷上下文发送过来，AI 针对性地进行解答
     """
-    print(f"\n[实时对话] 💬 收到用户针对 {request.file_path} 的提问...")
+    safe_print(f"\n[实时对话] 💬 收到用户针对 {request.file_path} 的提问...")
 
     if not settings.API_KEY:
         raise HTTPException(status_code=500, detail="未配置大模型 API_KEY")
@@ -156,10 +177,14 @@ async def chat_about_finding(request: PRChatRequest):
             "user_message": request.user_message
         })
 
+        reply = response.content
+        if not isinstance(reply, str):
+            reply = str(reply)
+
         return {
             "status": "success",
-            "reply": response.content
+            "reply": reply
         }
     except Exception as e:
-        print(f"[实时对话] ❌ 聊天回复失败: {e}")
+        safe_print(f"[实时对话] ❌ 聊天回复失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

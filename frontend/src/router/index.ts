@@ -8,7 +8,7 @@ const routes = [
     component: () => import('../views/PrSubmit.vue')
   },
   {
-    path: '/review/:taskId',
+    path: '/review',
     name: 'ReviewDetail',
     component: () => import('../views/ReviewDetail.vue')
   }

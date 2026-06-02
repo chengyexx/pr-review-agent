@@ -4,11 +4,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from app.agents.state import PRReviewState, CodeEvaluation
 from app.core.config import settings
+from app.core.log_util import safe_print
 
 
 async def synthesize_node(state: PRReviewState) -> dict:
     """总结与打分节点：生成全局评价（优缺点/用途），并量化雷达图分数。"""
-    print("📊 [Agent->Synthesize] 正在调用大模型生成全局代码评估报告...")
+    safe_print("📊 [Agent->Synthesize] 正在调用大模型生成全局代码评估报告...")
 
     findings = state.get("findings", [])
 
@@ -60,7 +61,7 @@ async def synthesize_node(state: PRReviewState) -> dict:
     try:
         evaluation: CodeEvaluation = await chain.ainvoke({"diff": state["diff_content"][:8000]})
     except Exception as e:
-        print(f"⚠️ 全局评估生成失败: {e}")
+        safe_print(f"⚠️ 全局评估生成失败: {e}")
         evaluation = CodeEvaluation(purpose="解析失败", pros=["无"], cons=["无"])
 
     return {

@@ -14,6 +14,11 @@ class GithubClient:
         if settings.GITHUB_TOKEN:
             self.base_headers["Authorization"] = f"Bearer {settings.GITHUB_TOKEN}"
 
+    def set_token(self, token: str) -> None:
+        """运行时更新 GitHub Token（供 API 层在请求时注入）"""
+        if token:
+            self.base_headers["Authorization"] = f"Bearer {token}"
+
     def parse_pr_url(self, url: str) -> dict:
         """
         从 PR 链接中提取 owner, repo 和 pull_number

@@ -8,14 +8,12 @@
 import { ref, watch } from 'vue'
 import { use } from 'echarts/core'
 import { RadarChart } from 'echarts/charts'
-import { TooltipComponent, LegendComponent } from 'echarts/components'
+import { TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
 
-// 注册必须的 ECharts 组件
-use([TooltipComponent, LegendComponent, RadarChart, CanvasRenderer])
+use([TooltipComponent, RadarChart, CanvasRenderer])
 
-// 接收父组件传来的维度得分
 const props = defineProps<{
   scores: {
     security: number
@@ -27,49 +25,71 @@ const props = defineProps<{
 
 const chartOption = ref({})
 
-// 监听数据变化，动态渲染酷炫的雷达图
-watch(() => props.scores, (newScores) => {
+watch(() => props.scores, (s) => {
   chartOption.value = {
-    tooltip: { trigger: 'item' },
-    radar: {
-      radius: '45%',
-      indicator: [
-        { name: '安全性 (Security)', max: 100 },
-        { name: '性能 (Performance)', max: 100 },
-        { name: '规范度 (Style)', max: 100 },
-        { name: '健壮性 (Robustness)', max: 100 }
-      ],
-      shape: 'circle',
-      splitNumber: 5,
-      axisName: { color: '#606266', fontWeight: 'bold' },
-      splitLine: {
-        lineStyle: { color: ['#e4e7ed', '#ebeef5', '#f2f6fc'].reverse() }
-      },
-      splitArea: { show: false },
-      axisLine: { lineStyle: { color: '#e4e7ed' } }
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(24, 24, 27, 0.95)',
+      borderColor: 'rgba(255,255,255,0.08)',
+      textStyle: { color: '#fafafa', fontSize: 12 },
     },
-    series: [
-      {
-        name: 'AI 评分',
-        type: 'radar',
-        data: [
-          {
-            value: [
-              newScores.security || 0,
-              newScores.performance || 0,
-              newScores.style || 0,
-              newScores.robustness || 0
+    radar: {
+      radius: '58%',
+      center: ['50%', '52%'],
+      indicator: [
+        { name: 'Security', max: 100 },
+        { name: 'Performance', max: 100 },
+        { name: 'Style', max: 100 },
+        { name: 'Robustness', max: 100 },
+      ],
+      shape: 'polygon',
+      splitNumber: 4,
+      axisName: {
+        color: '#71717a',
+        fontSize: 11,
+        fontWeight: 600,
+      },
+      splitLine: {
+        lineStyle: { color: 'rgba(255,255,255,0.06)' },
+      },
+      splitArea: {
+        show: true,
+        areaStyle: {
+          color: ['rgba(99,102,241,0.02)', 'rgba(99,102,241,0.04)'],
+        },
+      },
+      axisLine: {
+        lineStyle: { color: 'rgba(255,255,255,0.08)' },
+      },
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: [s.security, s.performance, s.style, s.robustness],
+        name: 'Quality Score',
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: {
+          width: 2,
+          color: '#818cf8',
+        },
+        itemStyle: {
+          color: '#818cf8',
+          borderColor: '#6366f1',
+          borderWidth: 2,
+        },
+        areaStyle: {
+          color: {
+            type: 'radial',
+            x: 0.5, y: 0.5, r: 0.5,
+            colorStops: [
+              { offset: 0, color: 'rgba(99, 102, 241, 0.35)' },
+              { offset: 1, color: 'rgba(34, 211, 238, 0.08)' },
             ],
-            name: '当前 PR 质量评分',
-            areaStyle: {
-              color: 'rgba(64, 158, 255, 0.4)' // 极客蓝半透明填充
-            },
-            lineStyle: { width: 2, color: '#409EFF' },
-            itemStyle: { color: '#409EFF' }
-          }
-        ]
-      }
-    ]
+          },
+        },
+      }],
+    }],
   }
 }, { immediate: true, deep: true })
 </script>
@@ -77,7 +97,7 @@ watch(() => props.scores, (newScores) => {
 <style scoped>
 .chart-container {
   width: 100%;
-  height: 350px;
+  height: 260px;
 }
 .chart {
   width: 100%;
