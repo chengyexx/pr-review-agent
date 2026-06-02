@@ -11,6 +11,7 @@ from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
 from app.agents.state import PRReviewState, ReviewFinding
 from app.core.config import settings
+from app.core.log_util import safe_print
 from app.services.github_client import github_client
 
 
@@ -38,12 +39,12 @@ List[ReviewFinding]:
     # ==========================================
     if not read_source_code:
         # ⚡ 极速降级模式：不查源码，直接跳过 LangGraph 循环
-        print(f"    ⚡ [LangGraph->Evaluate] 极速审查模式 (关闭查阅源码): {file_name} ...")
+        safe_print(f"    ⚡ [LangGraph->Evaluate] 极速审查模式 (关闭查阅源码): {file_name} ...")
         analysis_text = f"请直接对以下代码变更（Diff）进行严格审查，找出潜在的安全漏洞、边界条件和性能瓶颈：\n{file_diff[:8000]}"
 
     else:
         # ⏳ 深度智能体模式：启动基于 LangGraph 的主动搜索
-        print(f"    ⏳ [LangGraph->Evaluate] 启动状态机探索模式 (允许查阅源码): {file_name} ...")
+        safe_print(f"    ⏳ [LangGraph->Evaluate] 启动状态机探索模式 (允许查阅源码): {file_name} ...")
 
         tools = [read_github_file]
         llm_with_tools = llm.bind_tools(tools)
@@ -84,10 +85,10 @@ List[ReviewFinding]:
             result_state = await agent_app.ainvoke(initial_state)
             analysis_text = result_state["messages"][-1].content
         except Exception as e:
-            print(f"    ⚠️ [LangGraph->Evaluate] 探索阶段失败，降级为基础审查: {e}")
+            safe_print(f"    ⚠️ [LangGraph->Evaluate] 探索阶段失败，降级为基础审查: {e}")
             analysis_text = f"基于以下代码变更进行审查发现：\n{file_diff[:8000]}"
 
-    print(f"    💡 [LangGraph->Evaluate] {file_name} 推理完成，开始格式化提取...")
+    safe_print(f"    💡 [LangGraph->Evaluate] {file_name} 推理完成，开始格式化提取...")
 
     # ==========================================
     # 阶段二：格式化输出 (Structured Extraction)
@@ -112,13 +113,13 @@ List[ReviewFinding]:
         result: FindingsList = await format_chain.ainvoke({"analysis_text": analysis_text})
         return result.items
     except Exception as e:
-        print(f"    ❌ [LangGraph->Evaluate] 文件 {file_name} 格式化提取失败: {e}")
+        safe_print(f"    ❌ [LangGraph->Evaluate] 文件 {file_name} 格式化提取失败: {e}")
         return []
 
 
 async def evaluate_node(state: PRReviewState) -> dict:
     """深度评估节点：采用 Map-Reduce 并发架构，按文件拆分进行独立审查。"""
-    print("[Agent->Evaluate] 启动并发代码审查，解析 Diff 文件树...")
+    safe_print("[Agent->Evaluate] 启动并发代码审查，解析 Diff 文件树...")
 
     if not settings.API_KEY:
         return {"findings": []}
@@ -147,7 +148,7 @@ async def evaluate_node(state: PRReviewState) -> dict:
     try:
         patch_set = PatchSet(diff_content)
     except Exception as e:
-        print(f"⚠️ 解析 Diff 失败，降级为全文审查: {e}")
+        safe_print(f"⚠️ 解析 Diff 失败，降级为全文审查: {e}")
         # 🌟 透传开关参数
         findings = await evaluate_single_file(llm, "Unknown", diff_content, repo_name, read_source_code)
         return {"findings": findings}
@@ -165,7 +166,7 @@ async def evaluate_node(state: PRReviewState) -> dict:
     if not tasks:
         return {"findings": []}
 
-    print(f"🚀 [Agent->Evaluate] 共拆分出 {len(tasks)} 个有效文件，开启并行请求...")
+    safe_print(f"🚀 [Agent->Evaluate] 共拆分出 {len(tasks)} 个有效文件，开启并行请求...")
     results = await asyncio.gather(*tasks)
 
     all_findings = []
